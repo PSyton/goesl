@@ -10,7 +10,6 @@ package goesl
 type LoggerInterface interface {
 	Debug(message string, args ...interface{})
 	Error(message string, args ...interface{})
-	Notice(message string, args ...interface{})
 	Info(message string, args ...interface{})
 	Warning(message string, args ...interface{})
 }
@@ -42,12 +41,6 @@ func (l *localLogger) Debug(message string, args ...interface{}) {
 func (l *localLogger) Error(message string, args ...interface{}) {
 	if l.isValid() {
 		l.impl.Error(message, args)
-	}
-}
-
-func (l *localLogger) Notice(message string, args ...interface{}) {
-	if l.isValid() {
-		l.impl.Notice(message, args)
 	}
 }
 

@@ -6,45 +6,65 @@
 
 package goesl
 
-import (
-	"os"
-
-	"github.com/op/go-logging"
-)
+// LoggerInterface base logger interface
+type LoggerInterface interface {
+	Debug(message string, args ...interface{})
+	Error(message string, args ...interface{})
+	Notice(message string, args ...interface{})
+	Info(message string, args ...interface{})
+	Warning(message string, args ...interface{})
+}
 
 var (
-	log = logging.MustGetLogger("goesl")
-
-	// Example format string. Everything except the message has a custom color
-	// which is dependent on the log level. Many fields have a custom output
-	// formatting too, eg. the time returns the hour down to the milli second.
-	format = logging.MustStringFormatter(
-		"%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.8s}%{color:reset} %{message}",
-	)
+	logger localLogger
 )
 
-func Debug(message string, args ...interface{}) {
-	log.Debugf(message, args...)
+// SetLogger set global library logger
+func SetLogger(l LoggerInterface) {
+	logger.impl = l
 }
 
-func Error(message string, args ...interface{}) {
-	log.Errorf(message, args...)
+type localLogger struct {
+	LoggerInterface
+	impl LoggerInterface
 }
 
-func Notice(message string, args ...interface{}) {
-	log.Noticef(message, args...)
+func (l *localLogger) isValid() bool {
+	return l.impl != nil
 }
 
-func Info(message string, args ...interface{}) {
-	log.Infof(message, args...)
+func (l *localLogger) Debug(message string, args ...interface{}) {
+	if l.isValid() {
+		l.impl.Debug(message, args)
+	}
 }
 
-func Warning(message string, args ...interface{}) {
-	log.Warningf(message, args...)
+func (l *localLogger) Error(message string, args ...interface{}) {
+	if l.isValid() {
+		l.impl.Error(message, args)
+	}
+}
+
+func (l *localLogger) Notice(message string, args ...interface{}) {
+	if l.isValid() {
+		l.impl.Notice(message, args)
+	}
+}
+
+func (l *localLogger) Info(message string, args ...interface{}) {
+	if l.isValid() {
+		l.impl.Info(message, args)
+	}
+}
+
+func (l *localLogger) Warning(message string, args ...interface{}) {
+	if l.isValid() {
+		l.impl.Warning(message, args)
+	}
 }
 
 func init() {
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	formatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(formatter)
+	logger = localLogger{
+		impl: nil,
+	}
 }

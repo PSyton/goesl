@@ -90,6 +90,7 @@ func (m *Message) Parse() error {
 	if msgType != "text/event-json" {
 		for k, v := range cmr {
 
+	
 			m.Headers[k] = v[0]
 
 			// Will attempt to decode if % is discovered within the string itself
@@ -124,6 +125,12 @@ func (m *Message) Parse() error {
 		// because the FS events are generally "string: string") - extract into empty interface and migrate only strings.
 		// i.e. Event CHANNEL_EXECUTE_COMPLETE - "variable_DP_MATCH":["a=rtpmap:101 telephone-event/8000","101"]
 		var decoded map[string]interface{}
+
+		if len(m.Body) == 0 {
+			logger.Debug("Empty body: %v", m.Headers)
+			m.Body = []byte("")
+			return nil
+		}
 
 		if err := json.Unmarshal(m.Body, &decoded); err != nil {
 			return err

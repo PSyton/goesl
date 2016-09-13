@@ -110,13 +110,6 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (m 
 	if _, err := b.WriteTo(c); err != nil {
 		return nil, err
 	}
-
-	select {
-	case err := <-c.err:
-		return nil, err
-	case m := <-c.m:
-		return m, nil
-	}
 }
 
 // OriginatorAdd - Will return originator address known as net.RemoteAddr()
@@ -149,6 +142,8 @@ func (c *SocketConnection) Handle() {
 
 			if err != nil {
 				c.err <- err
+
+				logger.Error("Got error: !!!!!!!!!!!! %v", err)
 				done <- true
 				break
 			}

@@ -9,17 +9,17 @@ package goesl
 import "fmt"
 
 // Set - Helper that you can use to execute SET application against active ESL session
-func (sc *SocketConnection) ExecuteSet(key string, value string, sync bool) (m *Message, err error) {
+func (sc *SocketConnection) ExecuteSet(key string, value string, sync bool) (err error) {
 	return sc.Execute("set", fmt.Sprintf("%s=%s", key, value), sync)
 }
 
 // ExecuteHangup - Helper desgned to help with executing Answer against active ESL session
-func (sc *SocketConnection) ExecuteAnswer(args string, sync bool) (m *Message, err error) {
+func (sc *SocketConnection) ExecuteAnswer(args string, sync bool) (err error) {
 	return sc.Execute("answer", args, sync)
 }
 
 // ExecuteHangup - Helper desgned to help with executing Hangup against active ESL session
-func (sc *SocketConnection) ExecuteHangup(uuid string, args string, sync bool) (m *Message, err error) {
+func (sc *SocketConnection) ExecuteHangup(uuid string, args string, sync bool) (err error) {
 	if uuid != "" {
 		return sc.ExecuteUUID(uuid, "hangup", args, sync)
 	}

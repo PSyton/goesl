@@ -7,7 +7,6 @@
 package goesl
 
 import (
-	"bufio"
 	"fmt"
 	"time"
 )
@@ -15,7 +14,7 @@ import (
 // Client - In case you need to do inbound dialing against freeswitch server in order to originate call or see
 // sofia statuses or whatever else you came up with
 type Client struct {
-	SocketConnection
+	*SocketConnection
 
 	Proto   string `json:"freeswitch_protocol"`
 	Addr    string `json:"freeswitch_addr"`
@@ -24,53 +23,32 @@ type Client struct {
 }
 
 // EstablishConnection - Will attempt to establish connection against freeswitch and create new SocketConnection
-func (c *Client) EstablishConnection() error {
-	conn, err := c.Dial(c.Proto, c.Addr, time.Duration(c.Timeout*int(time.Second)))
-
-	c.SocketConnection = SocketConnection{
-		Conn: conn,
-		err:  make(chan error),
-		m:    make(chan *Message),
-	}
-
+func (c *Client) establishConnection() (err error) {
+	c.SocketConnection, err = dial(c.Proto, c.Addr, time.Duration(c.Timeout*int(time.Second)))
 	return err
 }
 
-// Authenticate - Method used to authenticate client against freeswitch. In case of any errors durring so
-// we will return error.
-func (c *Client) Authenticate() error {
-
-	m, err := newMessage(bufio.NewReaderSize(c, ReadBufferSize), false)
-
+func (c *Client) authenticate() error {
+	m, err := c.textreader.ReadMIMEHeader()
 	if err != nil {
-		logger.Error(ECouldNotCreateMessage, err)
+		c.Close()
 		return err
 	}
+	cType := m.Get("Content-Type")
+	if cType != "auth/request" {
+		c.Close()
+		logger.Error(EUnexpectedAuthHeader, cType)
+		return fmt.Errorf(EUnexpectedAuthHeader, cType)
+	}
 
-	cmr, err := m.tr.ReadMIMEHeader()
-
-	logger.Debug("A: %v %v ", cmr, err)
-
-	if err != nil && err.Error() != "EOF" {
-		logger.Error(ECouldNotReadMIMEHeaders, err)
+	err = c.Send(fmt.Sprintf("auth %s", c.Passwd))
+	if err != nil {
+		c.Close()
 		return err
 	}
-
-	if cmr.Get("Content-Type") != "auth/request" {
-		logger.Error(EUnexpectedAuthHeader, cmr.Get("Content-Type"))
-		return fmt.Errorf(EUnexpectedAuthHeader, cmr.Get("Content-Type"))
-	}
-
-	fmt.Fprintf(c, "auth %s\r\n\r\n", c.Passwd)
-
-	am, err := m.tr.ReadMIMEHeader()
-
-	if err != nil && err.Error() != "EOF" {
-		logger.Error(ECouldNotReadMIMEHeaders, err)
-		return err
-	}
-
-	if am.Get("Reply-Text") != "+OK accepted" {
+	m, err = c.textreader.ReadMIMEHeader()
+	if m.Get("Reply-Text") != "+OK accepted" {
+		c.Close()
 		logger.Error(EInvalidPassword, c.Passwd)
 		return fmt.Errorf(EInvalidPassword, c.Passwd)
 	}
@@ -88,14 +66,16 @@ func NewClient(host string, port uint, passwd string, timeout int) (Client, erro
 		Timeout: timeout,
 	}
 
-	if err := client.EstablishConnection(); err != nil {
+	if err := client.establishConnection(); err != nil {
 		return client, err
 	}
 
-	if err := client.Authenticate(); err != nil {
+	if err := client.authenticate(); err != nil {
 		client.Close()
 		return client, err
 	}
+
+	go client.handle()
 
 	return client, nil
 }

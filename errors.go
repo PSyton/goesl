@@ -20,4 +20,6 @@ var (
 	EUnexpectedAuthHeader    = "Expected auth/request content type. Got %s"
 	EInvalidPassword         = "Could not authenticate against freeswitch with provided password: %s"
 	ECouldNotCreateMessage   = "Error while creating new message: %s"
+	ECouldNotUnmarshallJSON  = "Error while unmarshal JSON event: %s"
+	WRemoveNonStringProperty = "Removed non-string property (%s)"
 )

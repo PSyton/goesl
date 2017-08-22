@@ -273,14 +273,6 @@ func (c *SocketConnection) readOne() bool {
 		return true
 	}
 
-	eventName, ok := msg.Headers["Event-Name"]
-	if ok && eventName == "CALL_UPDATE" {
-		toPhone, ok := msg.Headers["Caller-Caller-Id-Number"]
-		if !ok {
-			toPhone = msg.Headers["Caller-Caller-Id-Name"]
-		}
-		logger.Debug("Got CALL_UPDATE for: %s", toPhone)
-	}
 	c.m <- msg
 	return true
 }

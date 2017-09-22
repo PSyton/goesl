@@ -10,7 +10,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -251,27 +250,27 @@ func (c *SocketConnection) readOne() bool {
 	contentType := hdr.Get("Content-Type")
 	if !StringInSlice(contentType, AvailableMessageTypes) {
 		logger.Error(eUnsupportedMessageType, contentType, AvailableMessageTypes)
-		c.err <- newErrorUnsupportedMessageType(contentType)
 		return true
 	}
 
 	switch contentType {
 	case "command/reply":
 		reply := hdr.Get("Reply-Text")
-		if reply[:2] == "-E" {
-			c.err <- newErrorUnsuccessfulReply(reply[5:])
-			return true
-		}
+		//if reply[:2] == "-E" {
+		//msg.Error = reply[5:]
+		//c.err <- newErrorUnsuccessfulReply(reply[5:])
+		//return true
+		//}
 		if reply[0] == '%' {
 			copyHeaders(&hdr, msg, true)
 		} else {
 			copyHeaders(&hdr, msg, false)
 		}
 	case "api/response":
-		if string(msg.Body[:2]) == "-E" {
-			c.err <- errors.New(string(msg.Body)[5:])
-			return true
-		}
+		//if string(msg.Body[:2]) == "-E" {
+		///c.err <- errors.New(string(msg.Body)[5:])
+		//return true
+		//}
 		copyHeaders(&hdr, msg, false)
 	case "text/event-plain":
 		reader := bufio.NewReader(bytes.NewReader(msg.Body))

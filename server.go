@@ -7,7 +7,6 @@
 package goesl
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -33,7 +32,7 @@ func (s *OutboundServer) Start() error {
 	s.Listener, err = net.Listen(s.Proto, s.Addr)
 
 	if err != nil {
-		logger.Error(ECouldNotStartListener, err)
+		logger.Error(eCouldNotStartListener, err)
 		return err
 	}
 
@@ -46,7 +45,7 @@ func (s *OutboundServer) Start() error {
 			c, err := s.Accept()
 
 			if err != nil {
-				logger.Error(EListenerConnection, err)
+				logger.Error(eListenerConnection, err)
 				quit <- true
 				break
 			}
@@ -78,7 +77,7 @@ func NewOutboundServer(addr string) (*OutboundServer, error) {
 		addr = os.Getenv("GOESL_OUTBOUND_SERVER_ADDR")
 
 		if addr == "" {
-			return nil, fmt.Errorf(EInvalidServerAddr, addr)
+			return nil, newErrorInvalidServerAddr(addr)
 		}
 	}
 

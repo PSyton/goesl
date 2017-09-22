@@ -7,7 +7,8 @@
 package goesl
 
 import (
-	"fmt"
+	"net"
+	"strconv"
 	"time"
 )
 
@@ -30,27 +31,29 @@ func (c *Client) establishConnection() (err error) {
 
 func (c *Client) authenticate() error {
 	m, err := c.textreader.ReadMIMEHeader()
-	if err != nil {
-		c.Close()
-		return err
-	}
-	cType := m.Get("Content-Type")
-	if cType != "auth/request" {
-		c.Close()
-		logger.Error(EUnexpectedAuthHeader, cType)
-		return fmt.Errorf(EUnexpectedAuthHeader, cType)
+	if err != nil && err.Error() != "EOF" {
+		return newErrorReadMIMEHeaders(err)
 	}
 
-	err = c.Send(fmt.Sprintf("auth %s", c.Passwd))
+	cType := m.Get("Content-Type")
+	if cType != "auth/request" {
+		logger.Error(unexpectedAuthHeader, cType)
+		return newErrorUnexpectedAuthHeader(cType)
+	}
+
+	err = c.Send("auth " + c.Passwd)
 	if err != nil {
-		c.Close()
 		return err
 	}
+
 	m, err = c.textreader.ReadMIMEHeader()
+	if err != nil && err.Error() != "EOF" {
+		return newErrorReadMIMEHeaders(err)
+	}
+
 	if m.Get("Reply-Text") != "+OK accepted" {
-		c.Close()
-		logger.Error(EInvalidPassword, c.Passwd)
-		return fmt.Errorf(EInvalidPassword, c.Passwd)
+		logger.Error(invalidPassword)
+		return newErrorInvalidPassword()
 	}
 
 	return nil
@@ -61,21 +64,32 @@ func (c *Client) authenticate() error {
 func NewClient(host string, port uint, passwd string, timeout int) (Client, error) {
 	client := Client{
 		Proto:   "tcp", // Let me know if you ever need this open up lol
-		Addr:    fmt.Sprintf("%s:%d", host, port),
+		Addr:    net.JoinHostPort(host, strconv.Itoa(int(port))),
 		Passwd:  passwd,
 		Timeout: timeout,
 	}
 
-	if err := client.establishConnection(); err != nil {
-		return client, err
-	}
+	err := client.establishConnection()
 
-	if err := client.authenticate(); err != nil {
-		client.Close()
-		return client, err
-	}
+	if err == nil {
+		err = client.authenticate()
 
-	go client.handle()
+		if err != nil {
+			client.Close()
+		} else {
+			go client.handle()
+		}
+	}
 
 	return client, nil
+}
+
+// Errors - returns error channel
+func (c *Client) Errors() chan error {
+	return c.err
+}
+
+// Messages - returns messages channel
+func (c *Client) Messages() chan *Message {
+	return c.m
 }

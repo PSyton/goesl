@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type SocketConnection struct {
 	m          chan *Message
 	reader     *bufio.Reader
 	textreader *textproto.Reader
+	mutex      sync.Mutex
 }
 
 // create SocketConnection instance
@@ -54,10 +56,23 @@ func dial(network string, addr string, timeout time.Duration) (*SocketConnection
 // Send - Will send raw message to open net connection
 func (c *SocketConnection) Send(cmd string) error {
 	if strings.Contains(cmd, "\r\n") {
-		return fmt.Errorf(EInvalidCommandProvided, cmd)
+		return newErrorInvalidCommand(cmd)
 	}
 
-	fmt.Fprintf(c.connection, "%s\r\n\r\n", cmd)
+	// lock mutex
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	_, err := io.WriteString(c.connection, cmd)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.WriteString(c.connection, "\r\n\r\n")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -68,6 +83,42 @@ func (c *SocketConnection) SendMany(cmds []string) error {
 		if err := c.Send(cmd); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// SendEvent - Will loop against passed event headers
+func (c *SocketConnection) SendEvent(eventHeaders []string) error {
+	if len(eventHeaders) <= 0 {
+		return newErrorSendEvent(len(eventHeaders))
+	}
+
+	// lock mutex to prevent event headers from conflicting
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	_, err := io.WriteString(c.connection, "sendevent ")
+	if err != nil {
+		return err
+	}
+
+	for _, eventHeader := range eventHeaders {
+		_, err := io.WriteString(c.connection, eventHeader)
+		if err != nil {
+			return err
+		}
+
+		_, err = io.WriteString(c.connection, "\r\n")
+		if err != nil {
+			return err
+		}
+
+	}
+
+	_, err = io.WriteString(c.connection, "\r\n")
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -94,13 +145,13 @@ func (c *SocketConnection) ExecuteUUID(uuid string, command string, args string,
 }
 
 // SendMsg - Basically this func will send message to the opened connection
-func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (err error) {
+func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) error {
 
 	b := bytes.NewBufferString("sendmsg")
 
 	if uuid != "" {
 		if strings.Contains(uuid, "\r\n") {
-			return fmt.Errorf(EInvalidCommandProvided, msg)
+			return newErrorInvalidCommand(msg)
 		}
 
 		b.WriteString(" " + uuid)
@@ -110,12 +161,12 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (er
 
 	for k, v := range msg {
 		if strings.Contains(k, "\r\n") {
-			return fmt.Errorf(EInvalidCommandProvided, msg)
+			return newErrorInvalidCommand(msg)
 		}
 
 		if v != "" {
 			if strings.Contains(v, "\r\n") {
-				return fmt.Errorf(EInvalidCommandProvided, msg)
+				return newErrorInvalidCommand(msg)
 			}
 
 			b.WriteString(fmt.Sprintf("%s: %s\n", k, v))
@@ -128,9 +179,13 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (er
 		b.WriteString(data)
 	}
 
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	if _, err := b.WriteTo(c.connection); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -173,7 +228,7 @@ func (c *SocketConnection) Close() error {
 func (c *SocketConnection) readOne() bool {
 	hdr, err := c.textreader.ReadMIMEHeader()
 	if err != nil {
-		c.err <- err
+		c.err <- newErrorReadMIMEHeaders(err)
 		return false
 	}
 
@@ -182,20 +237,21 @@ func (c *SocketConnection) readOne() bool {
 	if v := hdr.Get("Content-Length"); v != "" {
 		length, err := strconv.Atoi(v)
 		if err != nil {
-			logger.Error(EInvalidContentLength, err)
-			c.err <- err
+			logger.Error(eInvalidContentLength, err)
+			c.err <- newErrorInvalidContentLength(err)
 			return false
 		}
 		msg.Body = make([]byte, length)
 		if _, err := io.ReadFull(c.reader, msg.Body); err != nil {
-			logger.Error(ECouldNotReadyBody, err)
-			c.err <- err
+			logger.Error(eCouldNotReadBody, err)
+			c.err <- newErrorCouldNotReadBody(err)
 			return false
 		}
 	}
 	contentType := hdr.Get("Content-Type")
 	if !StringInSlice(contentType, AvailableMessageTypes) {
-		c.err <- fmt.Errorf(EUnsupportedMessageType, contentType, AvailableMessageTypes)
+		logger.Error(eUnsupportedMessageType, contentType, AvailableMessageTypes)
+		c.err <- newErrorUnsupportedMessageType(contentType)
 		return true
 	}
 
@@ -203,7 +259,7 @@ func (c *SocketConnection) readOne() bool {
 	case "command/reply":
 		reply := hdr.Get("Reply-Text")
 		if reply[:2] == "-E" {
-			c.err <- errors.New(reply[5:])
+			c.err <- newErrorUnsuccessfulReply(reply[5:])
 			return true
 		}
 		if reply[0] == '%' {
@@ -229,14 +285,14 @@ func (c *SocketConnection) readOne() bool {
 		if v := hdr.Get("Content-Length"); v != "" {
 			length, err := strconv.Atoi(v)
 			if err != nil {
-				logger.Error(EInvalidContentLength, err)
-				c.err <- err
+				logger.Error(eInvalidContentLength, err)
+				c.err <- newErrorInvalidContentLength(err)
 				return false
 			}
 			msg.Body = make([]byte, length)
 			if _, err = io.ReadFull(reader, msg.Body); err != nil {
-				logger.Error(ECouldNotReadyBody, err)
-				c.err <- err
+				logger.Error(eCouldNotReadBody, err)
+				c.err <- newErrorCouldNotReadBody(err)
 				return false
 			}
 		}
@@ -244,8 +300,8 @@ func (c *SocketConnection) readOne() bool {
 	case "text/event-json":
 		decoded := make(map[string]interface{})
 		if err := json.Unmarshal(msg.Body, &decoded); err != nil {
-			logger.Error(ECouldNotUnmarshallJSON, err)
-			c.err <- err
+			logger.Error(eUnmarshallJSON, err)
+			c.err <- newErrorUnmarshallJSON(err)
 			return false
 		}
 
@@ -258,7 +314,7 @@ func (c *SocketConnection) readOne() bool {
 			case int:
 				msg.Headers[capitalize(k)] = strconv.Itoa(v.(int))
 			default:
-				logger.Warning(WRemoveNonStringProperty, k)
+				logger.Warning(wRemoveNonStringProperty, k)
 			}
 		}
 		if v, _ := msg.Headers["_body"]; v != "" {

@@ -16,20 +16,9 @@ import (
 // sofia statuses or whatever else you came up with
 type Client struct {
 	*SocketConnection
-
-	Proto   string `json:"freeswitch_protocol"`
-	Addr    string `json:"freeswitch_addr"`
-	Passwd  string `json:"freeswitch_password"`
-	Timeout int    `json:"freeswitch_connection_timeout"`
 }
 
-// EstablishConnection - Will attempt to establish connection against freeswitch and create new SocketConnection
-func (c *Client) establishConnection() (err error) {
-	c.SocketConnection, err = dial(c.Proto, c.Addr, time.Duration(c.Timeout*int(time.Second)))
-	return err
-}
-
-func (c *Client) authenticate() error {
+func (c *Client) authenticate(password string) error {
 	m, err := c.textreader.ReadMIMEHeader()
 	if err != nil && err.Error() != "EOF" {
 		return newErrorReadMIMEHeaders(err)
@@ -41,7 +30,7 @@ func (c *Client) authenticate() error {
 		return newErrorUnexpectedAuthHeader(cType)
 	}
 
-	err = c.Send("auth " + c.Passwd)
+	err = c.Send("auth " + password)
 	if err != nil {
 		return err
 	}
@@ -61,26 +50,26 @@ func (c *Client) authenticate() error {
 
 // NewClient - Will initiate new client that will establish connection and attempt to authenticate
 // against connected freeswitch server
-func NewClient(host string, port uint, passwd string, timeout int) (Client, error) {
-	client := Client{
-		Proto:   "tcp", // Let me know if you ever need this open up lol
-		Addr:    net.JoinHostPort(host, strconv.Itoa(int(port))),
-		Passwd:  passwd,
-		Timeout: timeout,
+func NewClient(host string, port uint, passwd string, timeout int) (*Client, error) {
+
+	address := net.JoinHostPort(host, strconv.Itoa(int(port)))
+	socketConnection, err := dial("tcp", address, time.Duration(timeout*int(time.Second)))
+
+	if err != nil {
+		return nil, err
 	}
 
-	err := client.establishConnection()
-
-	if err == nil {
-		err = client.authenticate()
-
-		if err != nil {
-			client.Close()
-		} else {
-			go client.handle()
-		}
+	client := &Client{
+		SocketConnection: socketConnection,
 	}
 
+	err = client.authenticate(passwd)
+	if err != nil {
+		client.Close()
+		return nil, err
+	}
+
+	go client.handle()
 	return client, nil
 }
 

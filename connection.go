@@ -46,9 +46,6 @@ func newConnection(c net.Conn) *SocketConnection {
 // Will establish timedout dial against specified address. In this case, it will be freeswitch server
 func dial(network string, addr string, timeout time.Duration) (*SocketConnection, error) {
 	c, err := net.DialTimeout(network, addr, timeout)
-	if err != nil {
-		return nil, err
-	}
 	return newConnection(c), err
 }
 

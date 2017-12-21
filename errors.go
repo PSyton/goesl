@@ -25,6 +25,7 @@ const (
 	unexpectedAuthHeader        = "Expected auth/request content type. Got %s"
 	invalidPassword             = "Could not authenticate against freeswitch with provided password."
 	wRemoveNonStringProperty    = "Removed non-string property (%s)"
+	errorWhileAccepConnection   = "Got error while accepting connection: %s"
 )
 
 type errorImpl struct {

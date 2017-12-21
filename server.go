@@ -8,95 +8,94 @@ package goesl
 
 import (
 	"net"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
-// OutboundServer - In case you need to start server, this Struct have it covered
-type OutboundServer struct {
-	net.Listener
+// ESLConnection wrapper for incoming connection
+type ESLConnection struct {
+	*SocketConnection
+}
 
-	Addr  string `json:"address"`
-	Proto string
+func (c *ESLConnection) process(aIncomingChannel chan<- ESLConnection) {
+	logger.Debug("Got new connection from: %s", c.OriginatorAddr())
+	if err := c.connect(); err != nil {
+		logger.Error(errorWhileAccepConnection, err)
+		c.Close()
+		return
+	}
 
-	Conns chan *SocketConnection
+	aIncomingChannel <- *c
+	c.handle()
+}
+
+// Connect - Helper designed to help you handle connection. Each outbound server when handling needs to connect e.g. accept
+// connection in order for you to do answer, hangup or do whatever else you wish to do
+func (c *ESLConnection) connect() error {
+	return c.Send("connect")
+}
+
+// Exit - Used to send exit signal to ESL. It will basically hangup call and close connection
+func (c *ESLConnection) Exit() error {
+	return c.Send("exit")
+}
+
+// ESLServer - In case you need to start server, this Struct have it covered
+type ESLServer struct {
+	listener    net.Listener
+	stop        chan struct{}
+	Connections chan ESLConnection
 }
 
 // Start - Will start new outbound server
-func (s *OutboundServer) Start() error {
-	logger.Info("Starting Freeswitch Outbound Server @ (address: %s) ...", s.Addr)
+func (s *ESLServer) Start(aListenAddress string) error {
+	logger.Info("Starting Freeswitch Outbound Server @ (address: %s) ...", aListenAddress)
 
 	var err error
 
-	s.Listener, err = net.Listen(s.Proto, s.Addr)
+	s.listener, err = net.Listen("tcp", aListenAddress)
 
 	if err != nil {
 		logger.Error(eCouldNotStartListener, err)
 		return err
 	}
 
-	quit := make(chan bool)
-
-	go func() {
-		for {
-			logger.Warning("Waiting for incoming connections ...")
-
-			c, err := s.Accept()
-
-			if err != nil {
-				logger.Error(eListenerConnection, err)
-				quit <- true
-				break
-			}
-
-			conn := newConnection(c)
-			logger.Info("Got new connection from: %s", conn.OriginatorAddr())
-			go conn.handle()
-			s.Conns <- conn
-		}
-	}()
-
-	<-quit
-
-	// Stopping server itself ...
-	s.Stop()
+	go s.runServer()
 
 	return err
 }
 
-// Stop - Will close server connection once SIGTERM/Interrupt is received
-func (s *OutboundServer) Stop() {
-	logger.Warning("Stopping Outbound Server ...")
-	s.Close()
+func (s *ESLServer) runServer() {
+	for {
+		logger.Debug("Waiting for incoming connections ...")
+
+		c, err := s.listener.Accept()
+		if err != nil {
+			select {
+			case <-s.stop:
+			default:
+				logger.Error(eListenerConnection, err)
+			}
+			return
+		}
+
+		conn := ESLConnection{
+			SocketConnection: newConnection(c),
+		}
+
+		go conn.process(s.Connections)
+	}
 }
 
-// NewOutboundServer - Will instanciate new outbound server
-func NewOutboundServer(addr string) (*OutboundServer, error) {
-	if len(addr) < 2 {
-		addr = os.Getenv("GOESL_OUTBOUND_SERVER_ADDR")
+// Stop - Will close server connection once SIGTERM/Interrupt is received
+func (s *ESLServer) Stop() {
+	logger.Debug("Stopping Outbound Server ...")
+	close(s.stop)
+	s.listener.Close()
+}
 
-		if addr == "" {
-			return nil, newErrorInvalidServerAddr(addr)
-		}
+// NewESLServer - Will instanciate new outbound server
+func NewESLServer() *ESLServer {
+	return &ESLServer{
+		stop:        make(chan struct{}),
+		Connections: make(chan ESLConnection),
 	}
-
-	server := OutboundServer{
-		Addr:  addr,
-		Proto: "tcp",
-		Conns: make(chan *SocketConnection),
-	}
-
-	sig := make(chan os.Signal, 1)
-
-	signal.Notify(sig, os.Interrupt)
-	signal.Notify(sig, syscall.SIGTERM)
-
-	go func() {
-		<-sig
-		server.Stop()
-		os.Exit(1)
-	}()
-
-	return &server, nil
 }

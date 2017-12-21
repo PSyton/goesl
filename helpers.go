@@ -36,14 +36,3 @@ func (sc *SocketConnection) Api(command string) error {
 func (sc *SocketConnection) BgApi(command string) error {
 	return sc.Send(fmt.Sprintf("bgapi " + command))
 }
-
-// Connect - Helper designed to help you handle connection. Each outbound server when handling needs to connect e.g. accept
-// connection in order for you to do answer, hangup or do whatever else you wish to do
-func (sc *SocketConnection) Connect() error {
-	return sc.Send("connect")
-}
-
-// Exit - Used to send exit signal to ESL. It will basically hangup call and close connection
-func (sc *SocketConnection) Exit() error {
-	return sc.Send("exit")
-}

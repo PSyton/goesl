@@ -72,13 +72,3 @@ func NewClient(host string, port uint, passwd string, timeout int) (*Client, err
 	go client.handle()
 	return client, nil
 }
-
-// Errors - returns error channel
-func (c *Client) Errors() chan error {
-	return c.err
-}
-
-// Messages - returns messages channel
-func (c *Client) Messages() chan *Message {
-	return c.m
-}

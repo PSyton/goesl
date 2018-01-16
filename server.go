@@ -10,12 +10,17 @@ import (
 	"net"
 )
 
+type (
+	// HandlerFunc hadler for incomming connection
+	HandlerFunc func(*ESLConnection) bool
+)
+
 // ESLConnection wrapper for incoming connection
 type ESLConnection struct {
 	*SocketConnection
 }
 
-func (c *ESLConnection) process(aIncomingChannel chan<- ESLConnection) {
+func (c *ESLConnection) process(aHandler HandlerFunc) {
 	logger.Debug("Got new connection from: %s", c.OriginatorAddr())
 	if err := c.connect(); err != nil {
 		logger.Error(errorWhileAccepConnection, err)
@@ -23,8 +28,17 @@ func (c *ESLConnection) process(aIncomingChannel chan<- ESLConnection) {
 		return
 	}
 
-	aIncomingChannel <- *c
-	c.handle()
+	// process events fron Freeswitch
+	go c.handle()
+
+	shouldExit := aHandler(c)
+	if shouldExit {
+		// Close connection
+		c.exit()
+	} else {
+		c.Close()
+	}
+
 }
 
 // Connect - Helper designed to help you handle connection. Each outbound server when handling needs to connect e.g. accept
@@ -34,19 +48,18 @@ func (c *ESLConnection) connect() error {
 }
 
 // Exit - Used to send exit signal to ESL. It will basically hangup call and close connection
-func (c *ESLConnection) Exit() error {
+func (c *ESLConnection) exit() error {
 	return c.Send("exit")
 }
 
 // ESLServer - In case you need to start server, this Struct have it covered
 type ESLServer struct {
-	listener    net.Listener
-	stop        chan struct{}
-	Connections chan ESLConnection
+	listener net.Listener
+	stop     chan struct{}
 }
 
 // Start - Will start new outbound server
-func (s *ESLServer) Start(aListenAddress string) error {
+func (s *ESLServer) Start(aListenAddress string, aHandler HandlerFunc) error {
 	logger.Info("Starting Freeswitch Outbound Server @ (address: %s) ...", aListenAddress)
 
 	var err error
@@ -58,12 +71,12 @@ func (s *ESLServer) Start(aListenAddress string) error {
 		return err
 	}
 
-	go s.runServer()
+	go s.runServer(aHandler)
 
 	return err
 }
 
-func (s *ESLServer) runServer() {
+func (s *ESLServer) runServer(aHandler HandlerFunc) {
 	for {
 		logger.Debug("Waiting for incoming connections ...")
 
@@ -81,7 +94,7 @@ func (s *ESLServer) runServer() {
 			SocketConnection: newConnection(c),
 		}
 
-		go conn.process(s.Connections)
+		go conn.process(aHandler)
 	}
 }
 
@@ -95,7 +108,6 @@ func (s *ESLServer) Stop() {
 // NewESLServer - Will instanciate new outbound server
 func NewESLServer() *ESLServer {
 	return &ESLServer{
-		stop:        make(chan struct{}),
-		Connections: make(chan ESLConnection),
+		stop: make(chan struct{}),
 	}
 }

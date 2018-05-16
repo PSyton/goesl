@@ -193,6 +193,8 @@ func (c *SocketConnection) OriginatorAddr() net.Addr {
 
 // Handle - Will handle new messages and close connection when there are no messages left to process
 func (c *SocketConnection) handle() {
+	logger.Debug("Start handle reads...")
+	defer logger.Debug("End handle reads...")
 	for c.readOne() {
 	}
 	// Closing the connection now as there's nothing left to do ...

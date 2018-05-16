@@ -22,6 +22,8 @@ type ESLConnection struct {
 
 func (c *ESLConnection) process(aHandler HandlerFunc) {
 	logger.Debug("Got new connection from: %s", c.OriginatorAddr())
+	defer logger.Debug("Finish connection handler")
+
 	if err := c.connect(); err != nil {
 		logger.Error(errorWhileAccepConnection, err)
 		c.Close()

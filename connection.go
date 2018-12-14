@@ -40,6 +40,16 @@ func newConnection(c net.Conn) *SocketConnection {
 		reader:     bufio.NewReaderSize(c, ReadBufferSize),
 	}
 	result.textreader = textproto.NewReader(result.reader)
+
+	tcp, ok := c.(*net.TCPConn)
+	if ok {
+		if err := tcp.SetKeepAlive(true); err != nil {
+			logger.Error("Can't enable keepalive")
+		}
+		if err := tcp.SetKeepAlivePeriod(time.Second); err != nil {
+			logger.Error("Can't set keepalive period")
+		}
+	}
 	return result
 }
 
@@ -47,6 +57,11 @@ func newConnection(c net.Conn) *SocketConnection {
 func dial(network string, addr string, timeout time.Duration) (*SocketConnection, error) {
 	c, err := net.DialTimeout(network, addr, timeout)
 	return newConnection(c), err
+}
+
+func (c *SocketConnection) writeString(aStr string) error {
+	_, err := io.WriteString(c.connection, aStr)
+	return err
 }
 
 // Send - Will send raw message to open net connection
@@ -59,17 +74,12 @@ func (c *SocketConnection) Send(cmd string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	_, err := io.WriteString(c.connection, cmd)
+	err := c.writeString(cmd)
 	if err != nil {
 		return err
 	}
 
-	_, err = io.WriteString(c.connection, "\r\n\r\n")
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.writeString("\r\n\r\n")
 }
 
 // SendMany - Will loop against passed commands and return 1st error if error happens
@@ -94,30 +104,24 @@ func (c *SocketConnection) SendEvent(eventHeaders []string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	_, err := io.WriteString(c.connection, "sendevent ")
+	err := c.writeString("sendevent ")
 	if err != nil {
 		return err
 	}
 
 	for _, eventHeader := range eventHeaders {
-		_, err := io.WriteString(c.connection, eventHeader)
+		err := c.writeString(eventHeader)
 		if err != nil {
 			return err
 		}
 
-		_, err = io.WriteString(c.connection, "\r\n")
+		err = c.writeString("\r\n")
 		if err != nil {
 			return err
 		}
-
 	}
 
-	_, err = io.WriteString(c.connection, "\r\n")
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.writeString("\r\n")
 }
 
 // Execute - Helper fuck to execute commands with its args and sync/async mode
@@ -178,11 +182,8 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) err
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if _, err := b.WriteTo(c.connection); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := b.WriteTo(c.connection)
+	return err
 }
 
 // OriginatorAddr - Will return originator address known as net.RemoteAddr()
@@ -210,9 +211,26 @@ func (c *SocketConnection) Close() error {
 	return nil
 }
 
+func (c *SocketConnection) isTimeout(aError error) bool {
+	if aError == nil {
+		return false
+	}
+
+	ne, ok := aError.(net.Error)
+	if ok && ne.Timeout() {
+		return true
+	}
+
+	return false
+
+}
+
 func (c *SocketConnection) readOne() bool {
 	hdr, err := c.textreader.ReadMIMEHeader()
 	if err != nil {
+		if c.isTimeout(err) {
+			return true
+		}
 		c.err <- newErrorReadMIMEHeaders(err)
 		return false
 	}
@@ -229,8 +247,14 @@ func (c *SocketConnection) readOne() bool {
 		msg.Body = make([]byte, length)
 		if _, err := io.ReadFull(c.reader, msg.Body); err != nil {
 			logger.Error(eCouldNotReadBody, err)
-			c.err <- newErrorCouldNotReadBody(err)
-			return false
+			if err != nil {
+				if !c.isTimeout(err) {
+					c.err <- newErrorCouldNotReadBody(err)
+					return false
+				}
+			}
+
+			return true
 		}
 	}
 	contentType := hdr.Get("Content-Type")

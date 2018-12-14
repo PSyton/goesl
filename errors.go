@@ -26,6 +26,7 @@ const (
 	invalidPassword             = "Could not authenticate against freeswitch with provided password."
 	wRemoveNonStringProperty    = "Removed non-string property (%s)"
 	errorWhileAccepConnection   = "Got error while accepting connection: %s"
+	errorWriteTimeout           = "Wrtie timeout"
 )
 
 type errorImpl struct {
@@ -39,6 +40,17 @@ func (e *errorImpl) Error() string {
 func newError(aMsg string) errorImpl {
 	return errorImpl{
 		message: aMsg,
+	}
+}
+
+// ErrorWriteTiemout timeout error
+type ErrorWriteTiemout struct {
+	errorImpl
+}
+
+func newErrorWriteTiemout() *ErrorWriteTiemout {
+	return &ErrorWriteTiemout{
+		errorImpl: newError(errorWriteTimeout),
 	}
 }
 

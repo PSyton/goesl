@@ -39,7 +39,7 @@ func newConnection(c net.Conn) *SocketConnection {
 		err:        make(chan error),
 		m:          make(chan *Message),
 		reader:     bufio.NewReaderSize(c, ReadBufferSize),
-		id: c.LocalAddr().String() + "-" + c.RemoteAddr().String()
+		id: c.LocalAddr().String() + "-" + c.RemoteAddr().String(),
 	}
 	result.textreader = textproto.NewReader(result.reader)
 

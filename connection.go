@@ -29,6 +29,7 @@ type SocketConnection struct {
 	reader     *bufio.Reader
 	textreader *textproto.Reader
 	mutex      sync.Mutex
+	id         string
 }
 
 // create SocketConnection instance
@@ -38,6 +39,7 @@ func newConnection(c net.Conn) *SocketConnection {
 		err:        make(chan error),
 		m:          make(chan *Message),
 		reader:     bufio.NewReaderSize(c, ReadBufferSize),
+		id: c.LocalAddr().String() + "-" + c.RemoteAddr().String()
 	}
 	result.textreader = textproto.NewReader(result.reader)
 	return result
@@ -185,16 +187,10 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) err
 	return nil
 }
 
-// OriginatorAddr - Will return originator address known as net.RemoteAddr()
-// This will actually be a freeswitch address
-func (c *SocketConnection) OriginatorAddr() net.Addr {
-	return c.connection.RemoteAddr()
-}
-
 // Handle - Will handle new messages and close connection when there are no messages left to process
 func (c *SocketConnection) handle() {
-	logger.Debug("Start handle reads...")
-	defer logger.Debug("End handle reads...")
+	logger.Debug("Start handle reads: %s", c.id)
+	defer logger.Debug("Finish handle reads: %s", c.id)
 	for c.readOne() {
 	}
 	// Closing the connection now as there's nothing left to do ...
@@ -299,7 +295,7 @@ func (c *SocketConnection) readOne() bool {
 			case int:
 				msg.Headers[capitalize(k)] = strconv.Itoa(v.(int))
 			default:
-				logger.Warning(wRemoveNonStringProperty, k)
+				//logger.Warning(wRemoveNonStringProperty, k)
 			}
 		}
 		if v, _ := msg.Headers["_body"]; v != "" {

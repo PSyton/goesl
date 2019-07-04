@@ -21,8 +21,10 @@ type ESLConnection struct {
 }
 
 func (c *ESLConnection) process(aHandler HandlerFunc) {
-	logger.Debug("Got new connection from: %s", c.OriginatorAddr())
-	defer logger.Debug("Finish connection handler")
+	connID := c.id
+
+	logger.Debug("Got new connection from: %s", connID)
+	defer logger.Debug("Finish connection from: %s", connID)
 
 	if err := c.connect(); err != nil {
 		logger.Error(errorWhileAccepConnection, err)
@@ -80,7 +82,7 @@ func (s *ESLServer) Start(aListenAddress string, aHandler HandlerFunc) error {
 
 func (s *ESLServer) runServer(aHandler HandlerFunc) {
 	for {
-		logger.Debug("Waiting for incoming connections ...")
+		logger.Debug("Waiting for incoming connections")
 
 		c, err := s.listener.Accept()
 		if err != nil {
@@ -91,6 +93,8 @@ func (s *ESLServer) runServer(aHandler HandlerFunc) {
 			}
 			return
 		}
+
+		logger.Debug("Accepted incomming connection")
 
 		conn := ESLConnection{
 			SocketConnection: newConnection(c),

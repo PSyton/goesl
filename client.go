@@ -18,6 +18,14 @@ type Client struct {
 	*SocketConnection
 }
 
+// ConnectOptions represent a cinitial connection options
+type ConnectOptions struct {
+	Host        string
+	Port        uint
+	Password    string
+	DialTimeout time.Duration
+}
+
 func (c *Client) authenticate(password string) error {
 	m, err := c.textreader.ReadMIMEHeader()
 	if err != nil && err.Error() != "EOF" {
@@ -50,10 +58,12 @@ func (c *Client) authenticate(password string) error {
 
 // NewClient - Will initiate new client that will establish connection and attempt to authenticate
 // against connected freeswitch server
-func NewClient(host string, port uint, passwd string, timeout int) (*Client, error) {
+func NewClient(aOpts ConnectOptions) (*Client, error) {
 
-	address := net.JoinHostPort(host, strconv.Itoa(int(port)))
-	socketConnection, err := dial("tcp", address, time.Duration(timeout*int(time.Second)))
+	// host string, port uint, passwd string, timeout int
+
+	address := net.JoinHostPort(aOpts.Host, strconv.Itoa(int(aOpts.Port)))
+	socketConnection, err := dial("tcp", address, aOpts.DialTimeout)
 
 	if err != nil {
 		return nil, err
@@ -63,7 +73,7 @@ func NewClient(host string, port uint, passwd string, timeout int) (*Client, err
 		SocketConnection: socketConnection,
 	}
 
-	err = client.authenticate(passwd)
+	err = client.authenticate(aOpts.Password)
 	if err != nil {
 		client.Close()
 		return nil, err

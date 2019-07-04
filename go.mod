@@ -1,4 +1,4 @@
-module github.com/psyton/goesl
+module github.com/PSyton/goesl
 
 go 1.12
 

@@ -34,25 +34,25 @@ func (l *localLogger) isValid() bool {
 
 func (l *localLogger) Debug(message string, args ...interface{}) {
 	if l.isValid() {
-		l.impl.Debug(message, args)
+		l.impl.Debug(message, args...)
 	}
 }
 
 func (l *localLogger) Error(message string, args ...interface{}) {
 	if l.isValid() {
-		l.impl.Error(message, args)
+		l.impl.Error(message, args...)
 	}
 }
 
 func (l *localLogger) Info(message string, args ...interface{}) {
 	if l.isValid() {
-		l.impl.Info(message, args)
+		l.impl.Info(message, args...)
 	}
 }
 
 func (l *localLogger) Warning(message string, args ...interface{}) {
 	if l.isValid() {
-		l.impl.Warning(message, args)
+		l.impl.Warning(message, args...)
 	}
 }
 

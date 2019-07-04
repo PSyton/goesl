@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"math/rand"
 
 	cryptorand "crypto/rand"
 

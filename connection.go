@@ -19,7 +19,28 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math/rand"
+
+	cryptorand "crypto/rand"
+
+	"github.com/oklog/ulid/v2"
 )
+
+var idLock sync.Mutex
+var fallbackID uint64
+
+func getULID() string {
+	idLock.Lock()
+	defer idLock.Unlock()
+
+	id, err := ulid.New(ulid.Timestamp(time.Now()), cryptorand.Reader)
+	if err != nil {
+		fallbackID++
+		return fmt.Sprintf("connection_%d", fallbackID)
+	}
+
+	return fmt.Sprintf("%s", id)
+}
 
 // SocketConnection main connection against ESL
 type SocketConnection struct {
@@ -39,7 +60,7 @@ func newConnection(c net.Conn) *SocketConnection {
 		err:        make(chan error),
 		m:          make(chan *Message),
 		reader:     bufio.NewReaderSize(c, ReadBufferSize),
-		id: c.LocalAddr().String() + "-" + c.RemoteAddr().String(),
+		id:         getULID(),
 	}
 	result.textreader = textproto.NewReader(result.reader)
 
@@ -58,7 +79,10 @@ func newConnection(c net.Conn) *SocketConnection {
 // Will establish timedout dial against specified address. In this case, it will be freeswitch server
 func dial(network string, addr string, timeout time.Duration) (*SocketConnection, error) {
 	c, err := net.DialTimeout(network, addr, timeout)
-	return newConnection(c), err
+	if err != nil {
+		return newConnection(c), err
+	}
+	return nil, err
 }
 
 func (c *SocketConnection) writeString(aStr string) error {

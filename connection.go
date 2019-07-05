@@ -79,9 +79,9 @@ func newConnection(c net.Conn) *SocketConnection {
 func dial(network string, addr string, timeout time.Duration) (*SocketConnection, error) {
 	c, err := net.DialTimeout(network, addr, timeout)
 	if err != nil {
-		return newConnection(c), err
+		return nil, err
 	}
-	return nil, err
+	return newConnection(c), nil
 }
 
 func (c *SocketConnection) writeString(aStr string) error {

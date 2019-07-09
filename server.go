@@ -26,7 +26,7 @@ func (c *ESLConnection) process(aHandler HandlerFunc) {
 	logger.Debug("Got new connection from: %s", connID)
 	defer logger.Debug("Finish connection from: %s", connID)
 
-	if err := c.connect(); err != nil {
+	if err := c.Send("connect"); err != nil {
 		logger.Error(errorWhileAccepConnection, err)
 		c.Close()
 		return
@@ -37,23 +37,9 @@ func (c *ESLConnection) process(aHandler HandlerFunc) {
 
 	shouldExit := aHandler(c)
 	if shouldExit {
-		// Close connection
-		c.exit()
-	} else {
-		c.Close()
+		c.Send("exit")
 	}
-
-}
-
-// Connect - Helper designed to help you handle connection. Each outbound server when handling needs to connect e.g. accept
-// connection in order for you to do answer, hangup or do whatever else you wish to do
-func (c *ESLConnection) connect() error {
-	return c.Send("connect")
-}
-
-// Exit - Used to send exit signal to ESL. It will basically hangup call and close connection
-func (c *ESLConnection) exit() error {
-	return c.Send("exit")
+	c.Close()
 }
 
 // ESLServer - In case you need to start server, this Struct have it covered
@@ -93,9 +79,6 @@ func (s *ESLServer) runServer(aHandler HandlerFunc) {
 			}
 			return
 		}
-
-		logger.Debug("Accepted incomming connection")
-
 		conn := ESLConnection{
 			SocketConnection: newConnection(c),
 		}
